@@ -15,8 +15,9 @@
 // @grant       GM_setValue
 // @grant       GM_getValue
 // @noframes
-// @version     1.0
-// @history     1.0 Initial release
+// @version     1.1
+// @history     1.1 Improve detection of overview pages.
+// @history     1.0 Initial release.
 // @updateURL   https://github.com/BrockA/SE-Election-Assistant/raw/master/Stack Exchange Election Assistant.user.js
 // @downloadURL https://github.com/BrockA/SE-Election-Assistant/raw/master/Stack Exchange Election Assistant.user.js
 // ==/UserScript==
@@ -40,8 +41,8 @@ if (onSEMC_pages) {
     SEMC_main ();
 }
 else {
-    if (location.pathname === "/election/"  &&  $("#content > #mainbar-full > table.elections").length) {
-        /*--- We are an election home/summary/overpage, not an actual election.
+    if (/\/election[\/0]*$/.test (location.pathname)  &&  $("#content > #mainbar-full > table.elections").length) {
+        /*--- We are an election home/summary/overview page, not an actual election.
             Note that an election will have this path if it is the only election for that site, so far.
         */
         return;
