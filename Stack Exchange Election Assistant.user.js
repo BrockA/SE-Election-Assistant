@@ -68,7 +68,7 @@ else {
     }
     if (candidates.length === 0 ) {
         var candidateCnt  = $("#sidebar .label-key:contains('oderator candidates')").next (".label-value").text (). trim ();
-        if (candidateCnt !== "0") {
+        if ( ! /^\d+$/.test (candidateCnt) ) {
             $('<div>Oops!  This is not an election page or the format has changed.</div>')
                 .prependTo (".container")
                 .css ( {
