@@ -15,7 +15,8 @@
 // @grant       GM_setValue
 // @grant       GM_getValue
 // @noframes
-// @version     1.1
+// @version     1.2
+// @history     1.1 Improve detection of election pages that don't yet have any candidates.
 // @history     1.1 Improve detection of overview pages.
 // @history     1.0 Initial release.
 // @updateURL   https://github.com/BrockA/SE-Election-Assistant/raw/master/Stack Exchange Election Assistant.user.js
@@ -66,16 +67,19 @@ else {
         candidates  = $("#mainbar ").find (".candidate-row");
     }
     if (candidates.length === 0 ) {
-        $('<div>Oops!  This is not an election page or the format has changed.</div>')
-            .prependTo (".container")
-            .css ( {
-                background:     "red",
-                "font-size":    "2em",
-                padding:        "1em",
-                "text-align":   "center"
-            } )
-        ;
-        return;
+        var candidateCnt  = $("#sidebar .label-key:contains('oderator candidates')").next (".label-value").text (). trim ();
+        if (candidateCnt !== "0") {
+            $('<div>Oops!  This is not an election page or the format has changed.</div>')
+                .prependTo (".container")
+                .css ( {
+                    background:     "red",
+                    "font-size":    "2em",
+                    padding:        "1em",
+                    "text-align":   "center"
+                } )
+            ;
+            return;
+        }
     }
     //--- SE's page does overwrites and dynamic sizing. Allow for that.
     window.addEventListener ("load", officialElectionPageMain);
