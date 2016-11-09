@@ -15,8 +15,9 @@
 // @grant       GM_setValue
 // @grant       GM_getValue
 // @noframes
-// @version     1.2
-// @history     1.1 Improve detection of election pages that don't yet have any candidates.
+// @version     1.3
+// @history     1.3 Cosmetic fixes; modern multiline strings, glitch in saved data when # of candidates change.
+// @history     1.2 Improve detection of election pages that don't yet have any candidates.
 // @history     1.1 Improve detection of overview pages.
 // @history     1.0 Initial release.
 // @updateURL   https://github.com/BrockA/SE-Election-Assistant/raw/master/Stack Exchange Election Assistant.user.js
@@ -126,6 +127,7 @@ function officialElectionPageMain () {
 
     //--- Cross update candVitals with any saved data.
     var savedVitals  = JSON.parse (GM_getValue (siteNameKey, "[0]") );
+    console.log ("savedVitals: ", savedVitals);
     if (savedVitals  &&  savedVitals[0].length === 4) {
         /*---
             savedVitals is keyed off userId and has 4 columns:
@@ -150,7 +152,7 @@ function officialElectionPageMain () {
                 if ( ! onPrimaryPg) {
                     candEntry[9] = svdEntry[3]; //-- dwnVoted
                 }
-                delete savedVitals[userId];
+                //delete savedVitals[userId];
             }
         }
 
@@ -183,7 +185,7 @@ function officialElectionPageMain () {
     candVitals      = candVitals.sort (sortByName);
     candVitals      = candVitals.sort (sortByScore);
 
-    $("body").append ( multilineStr ( function () { /*!
+    $("body").append ( `
         <div style="display:none; position:fixed; width: 9rem;" id="gmEaElectionOverlay">
             <h3>Candidate Filter and Jump table <span id="gmEaUsers"></span></h3><button>&#x23EB;</button>
             <div class="gmEaTabs"></div>
@@ -197,12 +199,15 @@ function officialElectionPageMain () {
                     <div class="gmEaSortTableBtns">
                         <label><input type="radio" name="gmEaTblSortType" value="score" checked>Sort Score</label><br>
                         <label><input type="radio" name="gmEaTblSortType" value="name">Sort Name</label>
+                        <!-- Switch on only for primary page/tab. Must reduce font size and/or bump card size
+                        <label><input type="radio" name="gmEaTblSortType" value="vote">Sort Votes</label>
+                        -->
                     </div>
                     <button id="gmEaSave">Save</button>
                 </div>
             </div>
         </div>
-    */} ) );
+    ` );
 
     var baseUrl     = location.protocol + "//" + location.host + location.pathname;
     var tabBar      = $("#gmEaElectionOverlay > .gmEaTabs");
@@ -705,7 +710,7 @@ function commonHousekeepingSort (zA, zB) {
 
 if (onSEMC_pages) {
     //--- On "Stack Exchange Moderator Candidate Statistics" pages.
-    GM_addStyle ( multilineStr ( function () {/*!
+    GM_addStyle ( `
         #gmEaStatusAlert {
             background:     lime none repeat scroll 0 0;
             border:         1px solid darkblue;
@@ -739,19 +744,19 @@ if (onSEMC_pages) {
         .gmEaUserID {
             font-style:     italic;
         }
-    */} ) );
+    ` );
 }
 else {
     //--- On main election pages.
-    GM_addStyle ( multilineStr ( function () {/*!
+    GM_addStyle ( `
         #gmEaElectionOverlay {
             background:     #f0fff0;
             border:         1px solid darkblue;
             border-radius:  0.5rem;
             overflow:       hidden;
-            padding:        0.5rem 0.8rem;
+            padding:        0.5rem 0.4rem 0.5rem 0.8rem;
             position:       fixed;
-            right:          0.5rem;
+            right:          0.1rem;
             top:            1rem;
             width:          20rem;
             height:         90vh;
@@ -874,7 +879,7 @@ else {
             color:          red;
             text-decoration: underline;
         }
-    */} ) );
+    ` );
 }
 
 
@@ -1031,16 +1036,6 @@ function scrollToNode (jNode, useRunningAvg) {
     }
 
     window.scrollTo (0, useOffsetY);
-}
-
-function multilineStr (dummyFunc) {
-    var str = dummyFunc.toString ();
-    str     = str.replace (/^[^\/]+\/\*!?/, '') // Strip function() { /*!
-            .replace (/\s*\*\/\s*\}\s*$/, '')   // Strip */ }
-            .replace (/\/\/.+$/gm, '') // Double-slash comments wreck CSS. Strip them.
-            ;
-
-    return str;
 }
 
 
