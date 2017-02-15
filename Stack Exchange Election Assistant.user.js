@@ -15,11 +15,14 @@
 // @grant       GM_setValue
 // @grant       GM_getValue
 // @noframes
-// @version     1.3
+// @version     1.4
+// @history     1.4 Prevent Facebook avatars from ballooning up. Fill in blank metadata for Tampermonkey.
 // @history     1.3 Cosmetic fixes; modern multiline strings, glitch in saved data when # of candidates change.
 // @history     1.2 Improve detection of election pages that don't yet have any candidates.
 // @history     1.1 Improve detection of overview pages.
 // @history     1.0 Initial release.
+// @author      Brock Adams
+// @homepage    http://stackapps.com/q/6692/7653
 // @updateURL   https://github.com/BrockA/SE-Election-Assistant/raw/master/Stack Exchange Election Assistant.user.js
 // @downloadURL https://github.com/BrockA/SE-Election-Assistant/raw/master/Stack Exchange Election Assistant.user.js
 // ==/UserScript==
@@ -245,19 +248,19 @@ function officialElectionPageMain () {
             else {
                 var bkmkUrl     = rehashURL (location, postId);
             }
-            var newNode = $(
-                  '<tr data-user-id="' + userId + '">'
-                +   '<td class="gmEaClickable" title="Jump to ' + userName + '\'s entry."><img src="' + userPic + '"></td>\n'
-                +   '<td class="gmEaClickable gmEaStopOverflow" title="Jump to ' + userName + '\'s entry.">' + userName + '<br>\n' + memberFor + '</td>\n'
-                +   '<td class="gmEaClickable" title="Jump to ' + userName + '\'s entry.">' + electScore + '<br>\n' + reputation + '</td>\n'
-                +   '<td><button class="gmEaHideBtn">hide</button>\n'
-                +   '    <button class="gmEaRejectBtn">reject</button>\n'
-                +   '    <button class="gmEaLikeBtn">like</button>\n'
-                +   '    <a href="' + bkmkUrl + '">bkmrk</a>\n'
-                +   '    <a href="http://elections.stackexchange.com/?id=' + userId + '&uname=' + encodeURIComponent(userName) + '#' + siteParam + '">semcs</a>\n'
-                +   '</td>\n'
-                + '</tr>'
-            )
+            var newNode = $( `
+                <tr data-user-id="${userId}">
+                  <td class="gmEaClickable" title="Jump to ${userName}\'s entry."><img class="gmIconONLY" src="${userPic}"></td>\n
+                  <td class="gmEaClickable gmEaStopOverflow" title="Jump to ${userName}\'s entry.">${userName}<br>\n${memberFor}</td>\n
+                  <td class="gmEaClickable" title="Jump to ${userName}\'s entry.">${electScore}<br>\n${reputation}</td>\n
+                  <td><button class="gmEaHideBtn">hide</button>\n
+                      <button class="gmEaRejectBtn">reject</button>\n
+                      <button class="gmEaLikeBtn">like</button>\n
+                      <a href="${bkmkUrl}">bkmrk</a>\n
+                      <a href="http://elections.stackexchange.com/?id=${userId}&uname=${encodeURIComponent(userName)}#${siteParam}">semcs</a>\n
+                  </td>\n
+                </tr>
+            ` )
             .appendTo (jmpTable);
 
             //--- Update liked, hidden, & rejected displays as needed.
@@ -878,6 +881,10 @@ else {
         #gmEaScrollableWrap > table > tbody > tr > td > a:hover {
             color:          red;
             text-decoration: underline;
+        }
+        .gmIconONLY {
+            width:          32px;
+            height:         32px;
         }
     ` );
 }
