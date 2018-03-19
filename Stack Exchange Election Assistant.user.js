@@ -15,7 +15,8 @@
 // @grant       GM_setValue
 // @grant       GM_getValue
 // @noframes
-// @version     1.5
+// @version     1.6
+// @history     1.6 Stop data confusion due to multiple URL possibilities for same election.
 // @history     1.5 Z index for new SE header; Fix jslint nags, adjust size for site/browser changes (need to iframe eventually).
 // @history     1.4 Prevent Facebook avatars from ballooning up. Fill in blank metadata for Tampermonkey.
 // @history     1.3 Cosmetic fixes; modern multiline strings, glitch in saved data when # of candidates change.
@@ -37,7 +38,18 @@ var gblUserName     = urlParams.uname;
 var currentTab      = $(".youarehere").text (). trim()  ||  location.search.replace (/\?tab=/, "");
 var onPrimaryPg     = currentTab === "primary";
 var onElectionPg    = currentTab === "election";
-var siteNameKey     = (location.hostname + location.pathname).replace (/\W/g, "_");
+/*-- The current election can be specified with at least 3 pathnames under old scheme:
+        "stackoverflow_com_election"
+        "stackoverflow_com_election_10"  and
+        "stackoverflow_com_election_"
+    Sanitize this, while still allowing for comparison to previous elections.
+*/
+var elctnKey        = location.pathname;
+if ( ! /\d/.test (elctnKey) ) {
+    elctnKey        = $("#tabs > a:first")[0].pathname;
+    elctnKey        = elctnKey.replace (/\/$/, "");  //  For virgin sites
+}
+var siteNameKey     = (location.hostname + elctnKey).replace (/\W/g, "_");
 
 var onSEMC_pages    = location.hostname === "elections.stackexchange.com";
 if (onSEMC_pages) {
@@ -161,7 +173,7 @@ function officialElectionPageMain () {
             }
         }
 
-        /*--- Now add any rows that were in savedVitals and not in candVitals to candVitals.
+        /*--- Now add any rows that were in savedVitals, and not in candVitals, to candVitals.
             Set isOnPage to 0.
             We do this so that user's filter data, from prev pages, is not lost.
         */
