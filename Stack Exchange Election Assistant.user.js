@@ -15,7 +15,8 @@
 // @grant       GM_setValue
 // @grant       GM_getValue
 // @noframes
-// @version     1.4
+// @version     1.5
+// @history     1.5 Z index for new SE header; Fix jslint nags, adjust size for site/browser changes (need to iframe eventually).
 // @history     1.4 Prevent Facebook avatars from ballooning up. Fill in blank metadata for Tampermonkey.
 // @history     1.3 Cosmetic fixes; modern multiline strings, glitch in saved data when # of candidates change.
 // @history     1.2 Improve detection of election pages that don't yet have any candidates.
@@ -31,8 +32,8 @@
 Common global stuff:
 */
 var urlParams       = getUrlParameters ();
-var gblUserId       = urlParams["id"];
-var gblUserName     = urlParams["uname"];
+var gblUserId       = urlParams.id;
+var gblUserName     = urlParams.uname;
 var currentTab      = $(".youarehere").text (). trim()  ||  location.search.replace (/\?tab=/, "");
 var onPrimaryPg     = currentTab === "primary";
 var onElectionPg    = currentTab === "election";
@@ -56,7 +57,7 @@ else {
     /*-- Direct linking has no anchors on the election page. So, if on that page and
         a user id was passed in, scroll to the appropriate post.
     */
-    var postId  = urlParams["pid"];;
+    var postId  = urlParams.pid;
     if (postId  &&  onElectionPg) {
         var userPost    = $('#' + postId + ', tr[data-candidate-id=' + postId + ']');
         if (userPost.length) {
@@ -103,6 +104,7 @@ function officialElectionPageMain () {
             electScore  = parseInt (electScore.replace (/^.+core (\d+).*$/i, "$1"), 10);
         var reputation  = candEntry.find (".candidate-score-breakdown > ul > li").eq (0).text ().trim ();
             reputation  = reputation.replace (/^.+?eputation\s+(.+)$/, "$1");
+            reputation  = reputation.replace (/>= 20k/i, "20K+");
         var memberFor   = candEntry.find (".user-info > .user-details").clone ();
             memberFor   = memberFor.find ("a").remove ().end ().text ().trim ();
             memberFor   = memberFor.replace (/member for /i, "");
@@ -163,15 +165,15 @@ function officialElectionPageMain () {
             Set isOnPage to 0.
             We do this so that user's filter data, from prev pages, is not lost.
         */
-        for (var userId in savedVitals) {
-            if (savedVitals.hasOwnProperty (userId) ) {
-                var svdEntry    = savedVitals[userId];
+        for (let lclUserId in savedVitals) {
+            if (savedVitals.hasOwnProperty (lclUserId) ) {
+                let svdEntry    = savedVitals[lclUserId];
                 var newCV_Entry = [
                     svdEntry[0],    //-- hideUser,
                     "",             //-- userName,
                     0,              //-- electScore,
                     "",             //-- postId,
-                    userId,         //-- userId,
+                    lclUserId,      //-- userId,
                     "",             //-- reputation,
                     "",             //-- memberFor,
                     "",             //-- userPic,
@@ -225,6 +227,7 @@ function officialElectionPageMain () {
 
     window.jmpTable     = $("#gmEaScrollableWrap > table");
     $.each (candVitals, function () {
+        var bkmkUrl;
         var hideUser    = this[0],
             userName    = this[1],
             electScore  = this[2],
@@ -240,22 +243,22 @@ function officialElectionPageMain () {
 
         if (isOnPage) {
             if (onElectionPg) {
-                var bkmkUrl     = cloneSimpleObject (location);
+                bkmkUrl         = cloneSimpleObject (location);
                 bkmkUrl.hash    = "";
                 bkmkUrl.search  = 'pid=' + postId;
                 bkmkUrl         = hrefObjToUrl (bkmkUrl);
             }
             else {
-                var bkmkUrl     = rehashURL (location, postId);
+                bkmkUrl         = rehashURL (location, postId);
             }
             var newNode = $( `
                 <tr data-user-id="${userId}">
-                  <td class="gmEaClickable" title="Jump to ${userName}\'s entry."><img class="gmIconONLY" src="${userPic}"></td>\n
+                  <td class="gmEaClickable gmIconONLY" title="Jump to ${userName}\'s entry."><img class="gmIconONLY" src="${userPic}"></td>\n
                   <td class="gmEaClickable gmEaStopOverflow" title="Jump to ${userName}\'s entry.">${userName}<br>\n${memberFor}</td>\n
                   <td class="gmEaClickable" title="Jump to ${userName}\'s entry.">${electScore}<br>\n${reputation}</td>\n
-                  <td><button class="gmEaHideBtn">hide</button>\n
+                  <td class="gmCntrlsCell"><button class="gmEaHideBtn">hide</button>\n
                       <button class="gmEaRejectBtn">reject</button>\n
-                      <button class="gmEaLikeBtn">like</button>\n
+                      <button class="gmEaLikeBtn">like</button><br>\n
                       <a href="${bkmkUrl}">bkmrk</a>\n
                       <a href="http://elections.stackexchange.com/?id=${userId}&uname=${encodeURIComponent(userName)}#${siteParam}">semcs</a>\n
                   </td>\n
@@ -265,8 +268,8 @@ function officialElectionPageMain () {
 
             //--- Update liked, hidden, & rejected displays as needed.
             if (liked) {
-                var btnjNode    = newNode.find (".gmEaLikeBtn");
-                var userPost    = upDateCandidateStatus (
+                let btnjNode    = newNode.find (".gmEaLikeBtn");
+                let userPost    = upDateCandidateStatus (
                     true,                       //-- bApply
                     btnjNode,                   //-- btnjNode
                     "clear",                    //-- newBtnText
@@ -277,8 +280,8 @@ function officialElectionPageMain () {
                 userPost.css ("background", "#ffffb3");
             }
             if (rejected) {
-                var btnjNode    = newNode.find (".gmEaRejectBtn");
-                var userPost    = upDateCandidateStatus (
+                let btnjNode    = newNode.find (".gmEaRejectBtn");
+                let userPost    = upDateCandidateStatus (
                     true,                       //-- bApply
                     btnjNode,                   //-- btnjNode
                     "clear",                    //-- newBtnText
@@ -289,8 +292,8 @@ function officialElectionPageMain () {
                 userPost.css ("background", "darkred");
             }
             if (hideUser || rejected) {
-                var btnjNode    = newNode.find (".gmEaHideBtn");
-                var userPost    = upDateCandidateStatus (
+                let btnjNode    = newNode.find (".gmEaHideBtn");
+                let userPost    = upDateCandidateStatus (
                     true,                       //-- bApply
                     btnjNode,                   //-- btnjNode
                     "show",                     //-- newBtnText
@@ -319,7 +322,7 @@ function officialElectionPageMain () {
     */
     //--- Min/Max button
     $("#gmEaElectionOverlay > button").click ( function () {
-        var bMinimize   = $("#gmEaScrollableWrap").is (":visible");
+        let bMinimize   = $("#gmEaScrollableWrap").is (":visible");
 
         $(this).html (bMinimize ? "&#x23EC;" : "&#x23EB;");
 
@@ -336,8 +339,8 @@ function officialElectionPageMain () {
         saveFilterData ();
 
         //-- Give user feedback
-        var gm_saveBtn      = $("#gmEaSave")[0];
-        var gm_msgOptions   = { position: {at: "left top", my: "right bottom"} };
+        let gm_saveBtn      = $("#gmEaSave")[0];
+        let gm_msgOptions   = { position: {at: "left top", my: "right bottom"} };
 
         unsafeWindow.gm_msgOptions  = cloneInto (gm_msgOptions, unsafeWindow);
 
@@ -350,7 +353,7 @@ function officialElectionPageMain () {
 
     //--- Sort buttons:
     $("#gmEaMetaControls").on ("change", "input[type='radio']",  function (zEvent) {
-        var srtMode     = $(this).val ();   //-- `name` or `score`
+        let srtMode     = $(this).val ();   //-- `name` or `score`
         sortJumpTable (srtMode);
     } );
 
@@ -549,7 +552,7 @@ function highlightVotedForUser (jNode) {
 
     //-- Auto like them for now.
     var btnjNode    = jmpTblRow.find (".gmEaLikeBtn");
-    var userPost    = upDateCandidateStatus (
+    userPost        = upDateCandidateStatus (
         true,                       //-- bApply
         btnjNode,                   //-- btnjNode
         "clear",                    //-- newBtnText
@@ -725,7 +728,7 @@ if (onSEMC_pages) {
             position:       fixed;
             top:            2rem;
             width:          calc(50vw - 4rem);
-            z-index:        888;
+            z-index:        8888;
         }
         #gmEaStatusAlert > h2 {
             font-size:      2rem;
@@ -761,10 +764,10 @@ else {
             position:       fixed;
             right:          0.1rem;
             top:            1rem;
-            width:          20rem;
+            width:          23rem;
             height:         90vh;
             max-height:     90vh;
-            z-index:        888;
+            z-index:        8888;
         }
         #gmEaElectionOverlay > h3 {
             margin-bottom:  0.5rem;
@@ -786,10 +789,10 @@ else {
             overflow-y:     auto;
         }
         #gmEaHideCandidates, #gmEaHideComments, #gmEaSave {
-            font-size:      0.5rem;
+            font-size:      0.75rem;
             font-weight:    bold;
-            margin-right:   0.4rem;
-            padding:        0.3rem 0.5rem;
+            margin-right:   0.8rem;
+            padding:        0.45rem 0.75rem;
         }
         #gmEaSave {
             background:     lightcoral;
@@ -799,9 +802,12 @@ else {
             color:          black !important;
         }
         .gmEaHideBtn, .gmEaRejectBtn, .gmEaLikeBtn {
-            font-size:      0.5rem;
-            margin:         0.1rem 0.3rem 0.1rem 0;
+            font-size:      0.75rem;
+            margin:         0.21rem 0;
             padding:        0.1rem 0.2rem;
+        }
+        .gmCntrlsCell > button+button {
+            margin-left:    0.45rem;
         }
         #gmEaMetaControls {
             margin-bottom:  0;
@@ -872,19 +878,22 @@ else {
             border-bottom:  1px solid white !important;
         }
         .gmEaStopOverflow {
-            max-width:      5.2rem;
+            max-width:      7.5rem;
             overflow:       hidden;
         }
-        #gmEaScrollableWrap > table > tbody > tr > td > a {
-            margin-right:   1rem;
+        #gmEaScrollableWrap > table > tbody > tr > td > a+a {
+            margin-left:    0.7rem;
         }
         #gmEaScrollableWrap > table > tbody > tr > td > a:hover {
             color:          red;
             text-decoration: underline;
         }
         .gmIconONLY {
-            width:          32px;
+            width:          34px;
             height:         32px;
+            padding:        0 2px 0 0 !important;
+            margin:         0;
+            vertical-align: middle;
         }
     ` );
 }
@@ -913,6 +922,7 @@ function getUrlParameters () {
 
 function rehashURL (locationOrHref, newHash) {
     var finalHash   = newHash  ?  '#' + newHash  :  "";
+    // jshint -W014
     var newURL      = location.protocol + "//"
                     + location.host
                     + location.pathname
@@ -923,7 +933,7 @@ function rehashURL (locationOrHref, newHash) {
 }
 
 function urlToHrefObj (sUrl) {
-    var locateObj   = {}
+    var locateObj   = {};
     var locProps    = ["protocol", "host", "pathname", "search", "hash"];
     var node        = document.createElement ("a");
     node.setAttribute ("href", sUrl);
@@ -943,6 +953,7 @@ function urlToHrefObj (sUrl) {
 function hrefObjToUrl (uObj) {
     var finalHash   = uObj.hash     ?  '#' + uObj.hash    :  "";
     var finalSearch = uObj.search   ?  '?' + uObj.search  :  "";
+    // jshint -W014
     var newURL      = uObj.protocol + "//"
                     + uObj.host
                     + uObj.pathname
@@ -958,8 +969,8 @@ function cloneSimpleObject (oldObject) {
 
 function waitForSettling (callbackFunc, iDelay, context) {
     "use strict";
+    iDelay              = iDelay  ||  200;
     var iTimer          = null;
-    var iDelay          = iDelay  ||  200;
     var fireCount       = 0;
     var triggerCount    = 0;
 
@@ -968,7 +979,7 @@ function waitForSettling (callbackFunc, iDelay, context) {
             mssg:       'Triggered ' + triggerCount + ' times and fired ' + fireCount + ' times.',
             fired:      fireCount,
             triggered:  triggerCount
-        }
+        };
     }
     function _reset () {
         fireCount       = 0;
@@ -1052,12 +1063,12 @@ Main for second set of pages.
 function SEMC_main () {
     document.title  = gblUserName + ' election info';
 
-    $("body").prepend (
-          '<div id="gmEaStatusAlert">\n'
-        + '    <h2>Waiting for user <span class=".gmEaUserID">' + gblUserName + '</span> to appear in the page below.</h2>\n'
-        + '    <button>&#x2573;</button>\n'
-        + '</div>\n'
-    );
+    $("body").prepend ( `
+        <div id="gmEaStatusAlert">
+            <h2>Waiting for user <span class=".gmEaUserID">${gblUserName}</span> to appear in the page below.</h2>
+            <button>&#x2573;</button>
+        </div>
+    ` );
 
     $("#gmEaStatusAlert > button").click ( function () {
         $("#gmEaStatusAlert").hide ();
