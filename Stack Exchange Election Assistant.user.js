@@ -15,7 +15,8 @@
 // @grant       GM_setValue
 // @grant       GM_getValue
 // @noframes
-// @version     1.6
+// @version     1.7
+// @history     1.7 Fix some scope errors and some timing races. Tuned to SE's new layout. Removed SEMC links, see https://meta.stackexchange.com/a/294723/148310
 // @history     1.6 Stop data confusion due to multiple URL possibilities for same election.
 // @history     1.5 Z index for new SE header; Fix jslint nags, adjust size for site/browser changes (need to iframe eventually).
 // @history     1.4 Prevent Facebook avatars from ballooning up. Fill in blank metadata for Tampermonkey.
@@ -28,6 +29,8 @@
 // @updateURL   https://github.com/BrockA/SE-Election-Assistant/raw/master/Stack Exchange Election Assistant.user.js
 // @downloadURL https://github.com/BrockA/SE-Election-Assistant/raw/master/Stack Exchange Election Assistant.user.js
 // ==/UserScript==
+/* global $, StackExchange, waitForKeyElements, cloneInto */
+/* eslint-disable no-multi-spaces, curly */
 
 /*---------------------------------------------------
 Common global stuff:
@@ -35,6 +38,9 @@ Common global stuff:
 var urlParams       = getUrlParameters ();
 var gblUserId       = urlParams.id;
 var gblUserName     = urlParams.uname;
+var gblCandVitals   = null;
+var gblJmpTable     = null;
+var gblSettleAjax   = null;
 var currentTab      = $(".youarehere").text (). trim()  ||  location.search.replace (/\?tab=/, "");
 var onPrimaryPg     = currentTab === "primary";
 var onElectionPg    = currentTab === "election";
@@ -99,7 +105,8 @@ else {
         }
     }
     //--- SE's page does overwrites and dynamic sizing. Allow for that.
-    window.addEventListener ("load", officialElectionPageMain);
+    //window.addEventListener ("load", officialElectionPageMain);  //  Started misfiring on Firefox
+    StackExchange.ready (officialElectionPageMain);
 }
 
 
@@ -107,17 +114,21 @@ else {
 The "Main" main...
 */
 function officialElectionPageMain () {
-    window.candVitals   = candidates.map ( function () {
+    var candidates      = $("#mainbar ").find ("[id^='post-']");
+    gblCandVitals       = candidates.map ( function () {
         var candEntry   = $(this);
         var idLink      = candEntry.find (".user-details > a");
         var userId      = idLink.attr ("href").replace (/^.+?(\d+).*$/, "$1");
         var userName    = idLink.text ();
-        var electScore  = candEntry.find (".candidate-score-breakdown > span").text ().trim ();
+        //  <b>candidate score 25/40</b>
+        //var electScore  = candEntry.find (".candidate-score-breakdown > span").text ().trim ();
+        var electScore  = candEntry.find (".candidate-score-breakdown > b").text ().trim ();
             electScore  = parseInt (electScore.replace (/^.+core (\d+).*$/i, "$1"), 10);
         var reputation  = candEntry.find (".candidate-score-breakdown > ul > li").eq (0).text ().trim ();
             reputation  = reputation.replace (/^.+?eputation\s+(.+)$/, "$1");
             reputation  = reputation.replace (/>= 20k/i, "20K+");
-        var memberFor   = candEntry.find (".user-info > .user-details").clone ();
+        //var memberFor   = candEntry.find (".user-info > .user-details").clone ();
+        var memberFor   = candEntry.find (".user-info .user-details").clone ();
             memberFor   = memberFor.find ("a").remove ().end ().text ().trim ();
             memberFor   = memberFor.replace (/member for /i, "");
         var userPic     = candEntry.find (".gravatar-wrapper-32 > img").attr ("src");
@@ -142,7 +153,7 @@ function officialElectionPageMain () {
         ] );
     } ).get ();
 
-    //--- Cross update candVitals with any saved data.
+    //--- Cross update gblCandVitals with any saved data.
     var savedVitals  = JSON.parse (GM_getValue (siteNameKey, "[0]") );
     console.log ("savedVitals: ", savedVitals);
     if (savedVitals  &&  savedVitals[0].length === 4) {
@@ -153,13 +164,13 @@ function officialElectionPageMain () {
                 liked       //--  2
                 dwnVoted    //--  3
 
-            Loop through candVitals and update the following fields if found in saved data:
+            Loop through gblCandVitals and update the following fields if found in saved data:
                 hideUser, rejected, liked
 
             If not on the primary page, also update dwnVoted.
         */
-        for (var J = candVitals.length - 1;  J >= 0;  --J) {
-            var candEntry   = candVitals[J];
+        for (var J = gblCandVitals.length - 1;  J >= 0;  --J) {
+            var candEntry   = gblCandVitals[J];
             var userId      = candEntry[4];
             var svdEntry    = savedVitals[userId];
             if (svdEntry) {
@@ -173,7 +184,7 @@ function officialElectionPageMain () {
             }
         }
 
-        /*--- Now add any rows that were in savedVitals, and not in candVitals, to candVitals.
+        /*--- Now add any rows that were in savedVitals, and not in gblCandVitals, to gblCandVitals.
             Set isOnPage to 0.
             We do this so that user's filter data, from prev pages, is not lost.
         */
@@ -194,13 +205,13 @@ function officialElectionPageMain () {
                     0,              //-- isOnPage,
                     svdEntry[2],    //-- liked
                 ];
-                candVitals.concat ( [newCV_Entry] );
+                gblCandVitals.concat ( [newCV_Entry] );
             }
         }
     }
 
-    candVitals      = candVitals.sort (sortByName);
-    candVitals      = candVitals.sort (sortByScore);
+    gblCandVitals      = gblCandVitals.sort (sortByName);
+    gblCandVitals      = gblCandVitals.sort (sortByScore);
 
     $("body").append ( `
         <div style="display:none; position:fixed; width: 9rem;" id="gmEaElectionOverlay">
@@ -220,7 +231,7 @@ function officialElectionPageMain () {
                         <label><input type="radio" name="gmEaTblSortType" value="vote">Sort Votes</label>
                         -->
                     </div>
-                    <button id="gmEaSave">Save</button>
+                    <div id="gmSvBtnWrap"><button id="gmEaSave">Save likes/rejects</button></div>
                 </div>
             </div>
         </div>
@@ -237,8 +248,8 @@ function officialElectionPageMain () {
 
     var siteParam       = location.hostname.replace (/\.(com|net)$/, "");
 
-    window.jmpTable     = $("#gmEaScrollableWrap > table");
-    $.each (candVitals, function () {
+    gblJmpTable         = $("#gmEaScrollableWrap > table");
+    $.each (gblCandVitals, function () {
         var bkmkUrl;
         var hideUser    = this[0],
             userName    = this[1],
@@ -271,12 +282,15 @@ function officialElectionPageMain () {
                   <td class="gmCntrlsCell"><button class="gmEaHideBtn">hide</button>\n
                       <button class="gmEaRejectBtn">reject</button>\n
                       <button class="gmEaLikeBtn">like</button><br>\n
-                      <a href="${bkmkUrl}">bkmrk</a>\n
-                      <a href="http://elections.stackexchange.com/?id=${userId}&uname=${encodeURIComponent(userName)}#${siteParam}">semcs</a>\n
+                      <a href="${bkmkUrl}">bkmrk</a>
                   </td>\n
                 </tr>
             ` )
-            .appendTo (jmpTable);
+            .appendTo (gblJmpTable);
+            /*-- Once and future?
+                      <a href="${bkmkUrl}">bkmrk</a>\n
+                      <a href="http://elections.stackexchange.com/?id=${userId}&uname=${encodeURIComponent(userName)}#${siteParam}">semcs</a>\n
+            */
 
             //--- Update liked, hidden, & rejected displays as needed.
             if (liked) {
@@ -321,7 +335,7 @@ function officialElectionPageMain () {
 
     //--- Wait for button votes to be ajaxed in.
     if (onPrimaryPg) {
-        window.settleAjax  = waitForSettling (sortAndSaveVoteResults);
+        gblSettleAjax  = waitForSettling (sortAndSaveVoteResults);
 
         waitForKeyElements (".vote-election-primary > .vote-down-on", rejectDwnvotedUser);
     }
@@ -383,7 +397,7 @@ function officialElectionPageMain () {
     } );
 
     //--- Hide/Show candidates buttons:
-    jmpTable.on ("click", ".gmEaHideBtn",  function (zEvent, option_1) {
+    gblJmpTable.on ("click", ".gmEaHideBtn",  function (zEvent, option_1) {
         var jThis       = $(this);
         var bHideEm     = /hide/.test (jThis.text() );
 
@@ -408,7 +422,7 @@ function officialElectionPageMain () {
     } );
 
     //--- Reject/Clear candidates buttons:
-    jmpTable.on ("click", ".gmEaRejectBtn",  function (zEvent) {
+    gblJmpTable.on ("click", ".gmEaRejectBtn",  function (zEvent) {
         var jThis       = $(this);
         var bRejctEm    = /reject/.test (jThis.text() );
         var newBtnText  = bRejctEm ? "clear" : "reject";
@@ -436,7 +450,7 @@ function officialElectionPageMain () {
     } );
 
     //--- Like/Clear candidates buttons:
-    jmpTable.on ("click", ".gmEaLikeBtn",  function (zEvent) {
+    gblJmpTable.on ("click", ".gmEaLikeBtn",  function (zEvent) {
         var jThis       = $(this);
         var bLikeEm     = /like/.test (jThis.text() );
         var newBtnText  = bLikeEm ? "clear" : "like";
@@ -465,7 +479,7 @@ function officialElectionPageMain () {
         var newBtnText  = bHideEm ? "Show all" : "Hide all";
         jThis.text (newBtnText);
 
-        $.each (candVitals, function () {
+        $.each (gblCandVitals, function () {
             if (this[10]) {   //-- isOnPage
                 this[0] = bHideEm;
             }
@@ -473,14 +487,14 @@ function officialElectionPageMain () {
 
         if (bHideEm) {
             candidates.hide ();
-            jmpTable.find ("tr").addClass ("gmEaCandidateHidden")
+            gblJmpTable.find ("tr").addClass ("gmEaCandidateHidden")
                 .find (".gmEaHideBtn").text ('show')
                 ;
             displayCandTotals (0);
         }
         else {
             candidates.show ();
-            jmpTable.find ("tr").removeClass ("gmEaCandidateHidden")
+            gblJmpTable.find ("tr").removeClass ("gmEaCandidateHidden")
                 .find (".gmEaHideBtn").text ('hide')
                 ;
             updateCandTotals ();
@@ -488,11 +502,11 @@ function officialElectionPageMain () {
     } );
 
     //--- Click User entries to scroll:
-    jmpTable.on ("click", ".gmEaClickable",  function (zEvent) {
+    gblJmpTable.on ("click", ".gmEaClickable",  function (zEvent) {
         var jThis       = $(this);
         var thisRow     = jThis.parent ();
         var userId      = thisRow.data ("user-id");
-        var candData    = $.map (candVitals, function (candEntry, J) {
+        var candData    = $.map (gblCandVitals, function (candEntry, J) {
             if (userId == candEntry[4]) {
                 return candEntry;
             }
@@ -515,14 +529,14 @@ Functions don't need to be wrapped.
 function rejectDwnvotedUser (jNode) {
     var userPost    = jNode.parentsUntil ("[id^='post-']").last ().parent ();
     var postId      = userPost.attr ("id");
-    var candData    = $.map (candVitals, function (candEntry, J) {
+    var candData    = $.map (gblCandVitals, function (candEntry, J) {
         if (postId == candEntry[3]) {
             return candEntry;
         }
         return null;
     } );
     var userId      = candData[4];
-    var jmpTblRow   = jmpTable.find ("tr[data-user-id=" + userId + "]");
+    var jmpTblRow   = gblJmpTable.find ("tr[data-user-id=" + userId + "]");
     var btnjNode    = jmpTblRow.find (".gmEaRejectBtn");
 
     upDateCandidateStatus (
@@ -546,20 +560,20 @@ function rejectDwnvotedUser (jNode) {
     userPost.css ("background", "darkred");
     userPost.hide ();
 
-    settleAjax.trigger ();  //-- sortAndSaveVoteResults() will be called after last wfke event finishes.
+    gblSettleAjax.trigger ();  //-- sortAndSaveVoteResults() will be called after last wfke event finishes.
 }
 
 function highlightVotedForUser (jNode) {
     var userPost    = jNode.parentsUntil (".candidate-row").last ().parent ();
     var postId      = userPost.data ("candidateId");
-    var candData    = $.map (candVitals, function (candEntry, J) {
+    var candData    = $.map (gblCandVitals, function (candEntry, J) {
         if (postId == candEntry[3]) {
             return candEntry;
         }
         return null;
     } );
     var userId      = candData[4];
-    var jmpTblRow   = jmpTable.find ("tr[data-user-id=" + userId + "]");
+    var jmpTblRow   = gblJmpTable.find ("tr[data-user-id=" + userId + "]");
     jmpTblRow.addClass ("gmEaCandidateVotedFor");
 
     //-- Auto like them for now.
@@ -586,8 +600,8 @@ function sortAndSaveVoteResults () {
 function saveFilterData () {
     var toSave  = {0: [1,2,3,4]};
 
-    for (var J = candVitals.length - 1;  J >= 0;  --J) {
-        var candEntry   = candVitals[J];
+    for (var J = gblCandVitals.length - 1;  J >= 0;  --J) {
+        var candEntry   = gblCandVitals[J];
         var userId      = candEntry[4];
         var newRow      = [
             candEntry[0] ,  //-- hideUser
@@ -603,18 +617,18 @@ function saveFilterData () {
 }
 
 function sortJumpTable (srtMode) {  //-- `name` or `score`
-    candVitals      = candVitals.sort (sortByName);
+    gblCandVitals      = gblCandVitals.sort (sortByName);
     if (srtMode === "score") {
-        candVitals  = candVitals.sort (sortByScore);
+        gblCandVitals  = gblCandVitals.sort (sortByScore);
     }
 
     //--- Sort in place using the master array as a guide.
-    $.each (candVitals, function () {
+    $.each (gblCandVitals, function () {
         if (this[10]) {   //-- isOnPage
             var userId      = this[4];
-            var matchingRow = jmpTable.find ('tr[data-user-id=' + userId + ']');
+            var matchingRow = gblJmpTable.find ('tr[data-user-id=' + userId + ']');
 
-            jmpTable.append (matchingRow);
+            gblJmpTable.append (matchingRow);
         }
     } );
 }
@@ -633,7 +647,7 @@ function upDateCandidateStatus (
 
     //TBD: Update display totals inside this map, so not looping through array twice.
     var rowKey      = -1;
-    var candData    = $.map (candVitals, function (candEntry, J) {
+    var candData    = $.map (gblCandVitals, function (candEntry, J) {
         if (userId == candEntry[4]) {
             rowKey  = J;
             return candEntry;
@@ -644,8 +658,8 @@ function upDateCandidateStatus (
     var userPost    = $('#' + postId + ', tr[data-candidate-id=' + postId + ']');
 
     //--- Update Master array
-    if (candVitals[rowKey]) {
-        candVitals[rowKey][cvTblColIdx]   = bApply + 0;  // convert bool to int, if necessary
+    if (gblCandVitals[rowKey]) {
+        gblCandVitals[rowKey][cvTblColIdx]   = bApply + 0;  // convert bool to int, if necessary
 
         if (bApply) {
             jmpTblRow.addClass (jmpTblClass);
@@ -666,7 +680,7 @@ Helper functions
 function updateCandTotals () {
     var candidatesInPlay = 0;
 
-    $.each (candVitals, function () {
+    $.each (gblCandVitals, function () {
         var hideUser    = this[0],
             rejected    = this[8],
             dwnVoted    = this[9],
@@ -767,6 +781,7 @@ if (onSEMC_pages) {
 else {
     //--- On main election pages.
     GM_addStyle ( `
+        /*-- USE PIXEL SIZES UNTIL CAN ISLOATE CSS FROM THE BLIPPING PAGE. */
         #gmEaElectionOverlay {
             background:     #f0fff0;
             border:         1px solid darkblue;
@@ -775,55 +790,64 @@ else {
             padding:        0.5rem 0.4rem 0.5rem 0.8rem;
             position:       fixed;
             right:          0.1rem;
-            top:            1rem;
-            width:          23rem;
-            height:         90vh;
-            max-height:     90vh;
+            top:            47px;
+            width:          355px;
+            height:         92vh;
+            max-height:     92vh;
             z-index:        8888;
+            font-size:      15px;
         }
         #gmEaElectionOverlay > h3 {
             margin-bottom:  0.5rem;
         }
         #gmEaElectionOverlay > button {
             position:       absolute;
-            right:          0;
-            top:            0;
-            font-size:      0.7rem;
-            padding:        0 0.3rem 0.2rem 0.3rem;
-            background:     gray;
+            right:          -4px;
+            top:            -20px;
+            font-size:      28px;
+            padding:        0;
+            background:     transparent;
+            border:         none;
+            margin:         0;
         }
         #gmEaElectionOverlay button:hover {
             color:          red;
         }
         #gmEaScrollableWrap {
-            max-height:     calc(100% - 5.5rem);
+            max-height:     calc(100% - 144px);
             overflow-x:     hidden;
             overflow-y:     auto;
         }
         #gmEaHideCandidates, #gmEaHideComments, #gmEaSave {
-            font-size:      0.75rem;
+            font-size:      12px;
             font-weight:    bold;
             margin-right:   0.8rem;
             padding:        0.45rem 0.75rem;
         }
+        #gmSvBtnWrap {
+            text-align:     center;
+            padding-top:    16px;
+            padding-left:   180px;
+        }
         #gmEaSave {
             background:     lightcoral;
-            float:          right;
+            font-size:      13px;
         }
         #gmEaSave:hover {
             color:          black !important;
         }
         .gmEaHideBtn, .gmEaRejectBtn, .gmEaLikeBtn {
-            font-size:      0.75rem;
+            font-size:      12px;
             margin:         0.21rem 0;
-            padding:        0.1rem 0.2rem;
+            padding:        2px 5px !important;
         }
         .gmCntrlsCell > button+button {
             margin-left:    0.45rem;
         }
         #gmEaMetaControls {
             margin-bottom:  0;
-            margin-top:     1rem;
+            margin-top:     13px;
+            height:         83px;
         }
         #gmEaScrollableWrap > table {
             background:     white;
@@ -851,7 +875,7 @@ else {
             clear:          none;
         }
         .gmEaSortTableBtns {
-            margin-top:     -0.8rem;
+            margin-top:     -5px;
         }
         #gmEaScrollableWrap > table > tbody > tr.gmEaCandidateHidden {
             background:     gray;
@@ -921,7 +945,7 @@ function getUrlParameters () {
         var qryStr      = location.search.substr (1); // strip off leading '?'
         var nvPairs     = qryStr.split ("&");
 
-        for (J = nvPairs.length - 1;  J >= 0;  --J) {
+        for (let J = nvPairs.length - 1;  J >= 0;  --J) {
             var nvPair      = nvPairs[J].split ("=");
             var name        = decodeURIComponent (nvPair[0]);
             var value       = decodeURIComponent (nvPair[1] || "");
