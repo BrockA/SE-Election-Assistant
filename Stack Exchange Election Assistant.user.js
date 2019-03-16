@@ -15,7 +15,8 @@
 // @grant       GM_setValue
 // @grant       GM_getValue
 // @noframes
-// @version     1.7
+// @version     1.8
+// @history     1.8 Adapt to changed layout on final election page.
 // @history     1.7 Fix some scope errors and some timing races. Tuned to SE's new layout. Removed SEMC links, see https://meta.stackexchange.com/a/294723/148310
 // @history     1.6 Stop data confusion due to multiple URL possibilities for same election.
 // @history     1.5 Z index for new SE header; Fix jslint nags, adjust size for site/browser changes (need to iframe eventually).
@@ -25,9 +26,8 @@
 // @history     1.1 Improve detection of overview pages.
 // @history     1.0 Initial release.
 // @author      Brock Adams
-// @homepage    http://stackapps.com/q/6692/7653
-// @updateURL   https://github.com/BrockA/SE-Election-Assistant/raw/master/Stack Exchange Election Assistant.user.js
-// @downloadURL https://github.com/BrockA/SE-Election-Assistant/raw/master/Stack Exchange Election Assistant.user.js
+// @homepage    https://stackapps.com/q/6692/7653
+// @updateURL   https://github.com/BrockA/SE-Election-Assistant/raw/master/Stack%20Exchange%20Election%20Assistant.user.js
 // ==/UserScript==
 /* global $, StackExchange, waitForKeyElements, cloneInto */
 /* eslint-disable no-multi-spaces, curly */
@@ -114,7 +114,7 @@ else {
 The "Main" main...
 */
 function officialElectionPageMain () {
-    var candidates      = $("#mainbar ").find ("[id^='post-']");
+    var candidates      = $("#mainbar").find (".candidate-row");
     gblCandVitals       = candidates.map ( function () {
         var candEntry   = $(this);
         var idLink      = candEntry.find (".user-details > a");
@@ -332,6 +332,15 @@ function officialElectionPageMain () {
         }
     } );
     updateCandTotals ();
+    if (candidates.length === 0) {
+        $("#gmEaScrollableWrap").append ( `
+            <h1><br>Oops!  No candidates found. If there <strong>are</strong> candidates listed on this page,
+                please ensure that the error is reported at
+                <a href="https://github.com/BrockA/SE-Election-Assistant/issues">GitHub</a>
+                or at <a href="https://stackapps.com/q/6692/7653">Stack Apps</a>.
+            </h1>
+        ` );
+    }
 
     //--- Wait for button votes to be ajaxed in.
     if (onPrimaryPg) {
@@ -513,7 +522,7 @@ function officialElectionPageMain () {
             return null;
         } );
         var postId      = candData[3];
-        var userPost    = $('#' + postId + ', tr[data-candidate-id=' + postId + ']');
+        var userPost    = $(`#${postId}, [data-candidate-id=${postId}]`).first ();
 
         var trgtOffsetY = userPost.offset ().top;
         window.scrollTo (0, trgtOffsetY);
